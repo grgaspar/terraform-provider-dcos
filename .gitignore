@@ -55,3 +55,6 @@ public
 # Apple notarization
 *.p12
 usr/
+.vscode/launch.json
+foo/configuration.properties
+done.zip
