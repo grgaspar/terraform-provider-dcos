@@ -70,8 +70,9 @@ func Provider() terraform.ResourceProvider {
 			"dcos_edgelb_v2_pool": resourceDcosEdgeLBV2Pool(),
 
 			//"dcos_marathon_app": resourceDcosMarathonApp(),
-			"dcos_ham_app":      resourceDcosMarathonApp(),
-			"dcos_marathon_pod": resourceDcosMarathonPod(),
+			"dcos_ham_app":       resourceDcosMarathonApp(),
+			"dcos_marathon_pod":  resourceDcosMarathonPod(),
+			"dcos_gsil_injector": resourceGsilInjector(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
 			"dcos_base_url":        dataSourceDcosBaseURL(),

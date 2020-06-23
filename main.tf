@@ -29,32 +29,31 @@ resource "dcos_ham_app" "my-server" {
     }
   }  
 
-  gsil_filename = "done.zip"
-  gsil_directory = "foo"
-  gsil_which_poke = 100
+  #gsil_filename = "done.zip"
+  #gsil_directory = "foo"
+  #gsil_which_poke = 100
+}
 
-  gsil_injector {
-    username = "ggaspar"
-    password = var.injector_password
-    location = "http://gdmst001v.gsil.rri-usa.org/"
+resource "dcos_gsil_injector" "injector-one" {
+  username = "ggaspar"
+  password = var.injector_password
+  location = "http://gdmst001v.gsil.rri-usa.org/"
 
-    entries {
-      entry {
-        key_name = "A_KEYFILE_NAME"
-        value = "bar"
-        path = "/gsiltest/autofix"
-        secret = false
-        function = "PUT"
-      }
-      entry {
-        key_name = "B_KEYFILE_NAME_TWO"
-        value = "bazz"
-        path = "/gsiltest/autofix"
-        secret = false
-        function = "PUT"
-      }
+  entries {
+    entry {
+      key_name = "A_KEYFILE_NAME"
+      value = "bar"
+      path = "/gsiltest/autofix"
+      secret = false
+    }
+    entry {
+      key_name = "B_KEYFILE_NAME_TWO"
+      value = "bazz"
+      path = "/gsiltest/autofix"
+      secret = false
     }
   }
+}
 
-}  
+ 
 

@@ -41,7 +41,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -55,22 +54,6 @@ import (
 )
 
 var legacyStringRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
-
-// GsilInjector is the definition for a gsil_injector type in marathon
-type GsilInjector struct {
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
-	Location string `json:"location,omitempty"`
-}
-
-// GsilInjectorEntry is the definition for the gsil_injector type in marathon
-type GsilInjectorEntry struct {
-	KeyName  string `json:"key_name,omitempty"`
-	Value    string `json:"value,omitempty"`
-	Path     string `json:"path,omitempty"`
-	Secret   string `json:"secret,omitempty"`
-	Function string `json:"function,omitempty"`
-}
 
 func resourceDcosMarathonApp() *schema.Resource {
 	return &schema.Resource{
@@ -625,195 +608,7 @@ func resourceDcosMarathonApp() *schema.Resource {
 				Computed: true,
 			},
 			// many other "computed" values haven't been added.
-
-			// New GSIL custom values used for installing gsil specific services
-			"gsil_filename": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-			},
-			"gsil_directory": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-			},
-			"gsil_which_poke": &schema.Schema{
-				Type:     schema.TypeInt,
-				Optional: true,
-			},
-			"gsil_pokemon_name": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-			},
-			"gsil_injector": &schema.Schema{
-				Type:     schema.TypeList,
-				Optional: true,
-				MaxItems: 1,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"username": &schema.Schema{
-							Type:     schema.TypeString,
-							Optional: true,
-						},
-						"password": &schema.Schema{
-							Type:     schema.TypeString,
-							Optional: true,
-						},
-						"location": &schema.Schema{
-							Type:     schema.TypeString,
-							Optional: true,
-						},
-						"entries": &schema.Schema{
-							Type:     schema.TypeList,
-							Optional: true,
-							ForceNew: false,
-							Elem: &schema.Resource{
-								Schema: map[string]*schema.Schema{
-									"entry": {
-										Type:     schema.TypeList,
-										Optional: true,
-										ForceNew: false,
-										Elem: &schema.Resource{
-											Schema: map[string]*schema.Schema{
-												"key_name": &schema.Schema{
-													Type:     schema.TypeString,
-													Optional: true,
-												},
-												"value": &schema.Schema{
-													Type:     schema.TypeString,
-													Optional: true,
-												},
-												"path": &schema.Schema{
-													Type:     schema.TypeString,
-													Optional: true,
-												},
-												"secret": &schema.Schema{
-													Type:     schema.TypeBool,
-													Optional: true,
-												},
-												"function": &schema.Schema{
-													Type:     schema.TypeString,
-													Optional: true,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			"gsil_injector_token": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-			},
-			"gsil_intent_manager_url": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-			},
-			"gsil_register_key_response": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-			},
 		},
-	}
-}
-
-func updateForGsil(d *schema.ResourceData, m interface{}) {
-	directory := d.Get("gsil_directory").(string)
-	whichPoke := d.Get("gsil_which_poke").(int)
-	filename := d.Get("gsil_filename").(string)
-
-	Unzip(filename, directory)
-
-	var pokemon string
-	if whichPoke != 0 {
-		pokemon = FindPoke(whichPoke)
-	} else {
-		pokemon = FindPoke(16) // find any random poke just so it doesn't fail.
-	}
-
-	Write(directory+"/"+"configuration.properties", "pokemon", pokemon)
-
-	var configValue string
-	configValue = Read(directory+"/"+"configuration.properties", "pokemon")
-	d.Set("gsil_pokemon_name", configValue)
-
-	if v, injectorOk := d.GetOk("gsil_injector.0.location"); injectorOk {
-		createInjector(d, v)
-	}
-}
-
-func createInjector(d *schema.ResourceData, v interface{}) {
-	injector := new(GsilInjector)
-	t := v.(string)
-	injector.Location = t
-
-	if v, ok := d.GetOk("gsil_injector.0.username"); ok {
-		injector.Username = v.(string)
-	}
-
-	if v, ok := d.GetOk("gsil_injector.0.password"); ok {
-		injector.Password = v.(string)
-	}
-
-	token := Login(injector.Location, injector.Username, injector.Password)
-	d.Set("gsil_injector_token", string(token))
-
-	respURL := IntentManagerURL(injector.Location, string(token))
-	d.Set("gsil_intent_manager_url", string(respURL))
-
-	if v, ok := d.GetOk("gsil_injector.0.entries.#"); ok {
-		log.Printf("[DEBUG] - gsil_injector.0.entries.# - %d", v)
-
-		for i := 0; i < v.(int); i++ {
-			if v, ok := d.GetOk("gsil_injector.0.entries." + strconv.Itoa(i) + ".entry.#"); ok {
-				log.Printf("[DEBUG] - gsil_injector.0.entries."+strconv.Itoa(i)+".entry.#- %d", v)
-				createEntries(d, v, i, injector, token)
-			}
-		}
-	}
-}
-
-func createEntries(d *schema.ResourceData, v interface{}, i int, injector *GsilInjector, token []byte) {
-	for j := 0; j < v.(int); j++ {
-		log.Println("[DEBUG] - creating entry : %d", j)
-		var entry InjectorEntry //entry := new(InjectorEntry)
-
-		if v, ok := d.GetOk("gsil_injector.0.entries." + strconv.Itoa(i) + ".entry." + strconv.Itoa(j) + ".key_name"); ok {
-			entry.keyName = v.(string)
-			log.Println("[DEBUG] - entry.0.key_name : " + entry.keyName)
-		} else {
-			log.Printf("[DEBUG] - NO gsil_injector.0.entries." + strconv.Itoa(i) + ".entry." + strconv.Itoa(j) + ".key_name")
-		}
-
-		if v, ok := d.GetOk("gsil_injector.0.entries." + strconv.Itoa(i) + ".entry." + strconv.Itoa(j) + ".value"); ok {
-			entry.value = v.(string)
-			log.Println("[DEBUG] - entry.0.value : " + entry.value)
-		}
-
-		if v, ok := d.GetOk("gsil_injector.0.entries." + strconv.Itoa(i) + ".entry." + strconv.Itoa(j) + ".path"); ok {
-			entry.path = v.(string)
-			log.Println("[DEBUG] - entry.0.path : " + entry.path)
-		}
-
-		if v, ok := d.GetOk("gsil_injector.0.entries." + strconv.Itoa(i) + ".entry." + strconv.Itoa(j) + ".secret"); ok {
-			entry.secret = v.(bool)
-			//log.Println("[DEBUG] - entry.0.secret : " + entry.secret)
-		}
-
-		if v, ok := d.GetOk("gsil_injector.0.entries." + strconv.Itoa(i) + ".entry." + strconv.Itoa(j) + ".function"); ok {
-			entry.function = v.(string)
-			log.Println("[DEBUG] - entry.0.function : " + entry.function)
-		}
-
-		token2 := RegisterKey(injector.Location, string(token), entry.keyName)
-		d.Set("gsil_register_key_response", string(token2))
-		log.Printf("\n[DEBUG]%v\n\n", string(token2))
-
-		token3 := SetInjectorEntry(injector.Location, string(token), entry)
-		fmt.Printf("\n%v\n\n", string(token3))
-		//paramMap := d.Get(fmt.Sprintf("gsil_inject.0.entries.%d", i)).(map[string]interface{})
-		//docker.AddParameter(paramMap["key"].(string), paramMap["value"].(string))
 	}
 }
 
@@ -931,9 +726,6 @@ func resourceDcosMarathonAppCreate(d *schema.ResourceData, meta interface{}) err
 		log.Println("[ERROR] creating application", err)
 		return err
 	}
-
-	// gsil add
-	updateForGsil(d, meta)
 
 	d.Partial(true)
 	d.SetId(application.ID)
@@ -1419,43 +1211,6 @@ func setSchemaFieldsForApp(app *marathon.Application, d *schema.ResourceData) er
 	return nil
 }
 
-func readForGsil(app *marathon.Application, d *schema.ResourceData) error {
-	err := d.Set("gsil_filename", "done.zip")
-	if err != nil {
-		return errors.New("Failed to set gsil_filename: " + err.Error())
-	}
-	d.SetPartial("gsil_filename")
-
-	err = d.Set("gsil_directory", "foo")
-	if err != nil {
-		return errors.New("Failed to set gsil_directory: " + err.Error())
-	}
-	d.SetPartial("gsil_directory")
-
-	pokeName := Read("foo"+"/"+"configuration.properties", "pokemon")
-	var pokeNumber int
-
-	if pokeName != "" {
-		pokeNumber = FindPokeNumber(pokeName)
-	} else {
-		pokeNumber = 0
-	}
-
-	err = d.Set("gsil_which_poke", pokeNumber)
-	if err != nil {
-		return errors.New("Failed to set gsil_which_poke: " + err.Error())
-	}
-	d.SetPartial("gsil_which_poke")
-
-	err = d.Set("gsil_injector_location", "")
-	if err != nil {
-		return errors.New("Faild to set gsil_injector_location: " + err.Error())
-	}
-	d.SetPartial("gsil_injector_location")
-
-	return nil
-}
-
 func resourceDcosMarathonAppUpdate(d *schema.ResourceData, meta interface{}) error {
 	config, err := genMarathonConf(d, meta)
 	if err != nil {
@@ -1473,8 +1228,6 @@ func resourceDcosMarathonAppUpdate(d *schema.ResourceData, meta interface{}) err
 	}
 
 	application := mapResourceToApplication(d)
-
-	updateForGsil(d, meta)
 
 	deploymentID, err := client.UpdateApplication(application, true)
 	if err != nil {
@@ -1502,11 +1255,6 @@ func resourceDcosMarathonAppDelete(d *schema.ResourceData, meta interface{}) err
 	}
 
 	return nil
-}
-
-func deleteForGsil(d *schema.ResourceData) {
-	directory := d.Get("gsil_directory").(string)
-	err = os.RemoveAll(directory)
 }
 
 func mapResourceToApplication(d *schema.ResourceData) *marathon.Application {
